@@ -5,8 +5,7 @@ This is a C# library that allows you to utilize existing basic class data struct
 The EZ Mode wrapper and converter has several convenient functions to cover basic needs without resorting to raw SQLite syntax, but it supports raw syntax and direct connection accessibility too in order to cover all bases.
 
 ---
-EZ Mode Functions:
-
+## "EZ Mode" Functions:
 ```c#
 VerifyType<T>() //Verifies the viability of a provided object and creates a SQLite table for it if it does not exist.
 Insert(...) //Looks up the type of passed dynamic items and inserts them into the table.
@@ -17,13 +16,15 @@ Delete(...) //Given items, deletes their corresponding rows within the table.
 ```
 
 ---
-Advanced/Hard Mode Functions:
+
+## "Hard Mode"/Advanced Functions:
 ```C#
 ExecuteRawNonQuery(...) //Given a SQLite statement, execute it directly.
 ExecuteRawQuery<T>(...) //Given a SQLite query, execute it and convert results to the provided type. 
 db.Connection //Get a reference to the SQLite connection directly for full control.
 ```
 
+## Example Program:
 
 Here's an example program to show the library can be utilized and how easy it is to set up.
 ```c#
