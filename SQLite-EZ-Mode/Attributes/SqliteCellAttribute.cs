@@ -24,7 +24,7 @@ namespace SQLiteEZMode.Attributes
         public bool IsPrimaryId { get; private set; }
 
         /// <summary>
-        /// Create a new attribute to be used to store meta data used by SQLite EZ DB.
+        /// Create a new attribute to be used to store meta data used by SQLite EZ Mode.
         /// </summary>
         /// <param name="columnName">The column name that should be mapped to this property.</param>
         /// <param name="dataType">The SQLite DataType that this property should be mapped to.</param>
@@ -37,7 +37,7 @@ namespace SQLiteEZMode.Attributes
         }
 
         /// <summary>
-        /// Create a new attribute to be used to store meta data used by SQLite EZ DB.
+        /// Create a new attribute to be used to store meta data used by SQLite EZ Mode.
         /// </summary>
         /// <param name="dataType">The SQLite DataType that this property should be mapped to.</param>
         /// <param name="isPrimaryId">True if this property is an integer that should be mapped as a SQLite primary key.</param>

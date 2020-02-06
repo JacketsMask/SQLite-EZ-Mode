@@ -16,19 +16,19 @@ namespace SQLiteEZMode
     public class EzDb : IDisposable
     {
         /// <summary>
-        /// The open SQLite connection reference to be used for manual manipulation if EZ DB functionality falls short.
+        /// The open SQLite connection reference to be used for manual manipulation if EZ Mode functionality falls short.
         /// </summary>
         public SqliteConnection Connection { get; private set; }
 
         /// <summary>
-        /// The OperationMode that EZ DB should operate within.
+        /// The OperationMode that EZ Mode should operate within.
         /// </summary>
         public OperationModes OperationMode { get; private set; }
 
         private Dictionary<Type, MetaSqliteRow> rowSchemaMap;
 
         /// <summary>
-        /// Create a new Sqlite EZ DB object and open a connection to the passed database, or prepare to create it if it doesn't yet exist.
+        /// Create a new Sqlite EZ Mode object and open a connection to the passed database, or prepare to create it if it doesn't yet exist.
         /// </summary>
         /// <example>
         /// <code>

@@ -9,7 +9,7 @@ namespace SQLite_EZ_Mode_Test
     {
         [SqliteTableAttribute("Things")]
         public class Thing
-        { //todo: move this to tester
+        {
             [SqliteCellAttribute(CellDataTypes.INTEGER, isPrimaryId: true)]
             public int Id { get; set; }
             [SqliteCellAttribute(CellDataTypes.TEXT)]
@@ -20,7 +20,7 @@ namespace SQLite_EZ_Mode_Test
 
         [SqliteTableAttribute("BetterThings")]
         public class BetterThing
-        { //todo: move this to tester
+        {
             [SqliteCellAttribute(CellDataTypes.INTEGER, isPrimaryId: true)]
             public int Id { get; set; }
             [SqliteCellAttribute(CellDataTypes.TEXT)]
