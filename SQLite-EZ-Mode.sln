@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29609.76
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SQLite-EZ-Mode", "SQLite-EZ-Mode\SQLite-EZ-Mode.csproj", "{11B63169-DE72-4592-A025-5710E33A8EFC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SQLite-EZ-Mode-Test", "SQLite-EZ-Mode-Test\SQLite-EZ-Mode-Test.csproj", "{8925CAF6-3B56-42C2-9D4F-D2095D33F882}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{11B63169-DE72-4592-A025-5710E33A8EFC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{11B63169-DE72-4592-A025-5710E33A8EFC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{11B63169-DE72-4592-A025-5710E33A8EFC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{11B63169-DE72-4592-A025-5710E33A8EFC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8925CAF6-3B56-42C2-9D4F-D2095D33F882}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8925CAF6-3B56-42C2-9D4F-D2095D33F882}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8925CAF6-3B56-42C2-9D4F-D2095D33F882}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8925CAF6-3B56-42C2-9D4F-D2095D33F882}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {AE6FD868-6E86-4F76-AB9E-FFBBB48A293D}
+	EndGlobalSection
+EndGlobal
