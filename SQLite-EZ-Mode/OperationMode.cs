@@ -2,6 +2,7 @@
 {
     public enum OperationModes
     {
-        EXPLICIT_TAGGING
+        EXPLICIT_TAGGING,
+        TAGLESS
     }
 }

@@ -56,8 +56,7 @@ namespace SQLiteEZMode.Attributes
     {
         NULL,
         INTEGER,
-        REAL,
         TEXT,
-        BLOB
+        JSON,
     }
 }

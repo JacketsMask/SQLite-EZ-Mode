@@ -17,6 +17,30 @@ namespace SQLiteEZMode.ReflectiveObjects
             this.MetaSqliteCells = new List<MetaSqliteCell>();
         }
 
+        public MetaSqliteRow Copy()
+        {
+            var newMetaRow = new MetaSqliteRow();
+            newMetaRow.TableName = this.TableName;
+
+            foreach (var sqliteCell in this.MetaSqliteCells)
+            {
+                newMetaRow.MetaSqliteCells.Add(new MetaSqliteCell(sqliteCell));
+            }
+            return newMetaRow;
+        }
+
+        public string GetInsertIntoStatement()
+        {
+            List<string> paramList = new List<string>();
+            int columnCount = MetaSqliteCells.Count() - 1;
+            for (int i = 1; i <= columnCount; i++)
+            {
+                paramList.Add($"@param{i}");
+            }
+
+            return $"INSERT INTO {this.TableName} ({string.Join(",", this.MetaSqliteCells.Where(x => !x.IsPrimaryId).Select(x => x.ColumnName))}) VALUES ({string.Join(",", paramList)})";
+        }
+
         public string GetCreateStatement()
         {
             return $"CREATE TABLE {this.TableName}({string.Join(",", this.MetaSqliteCells.Select(x => x.GetCellCreateInfo())) })";
@@ -35,7 +59,7 @@ namespace SQLiteEZMode.ReflectiveObjects
 
         public string GetUpdateStatement()
         {
-            string updateClause = string.Join(",", MetaSqliteCells.Where(x=>!x.IsPrimaryId).Select(x => x.ColumnName + " = '" + x.Value + "'"));
+            string updateClause = string.Join(",", MetaSqliteCells.Where(x => !x.IsPrimaryId).Select(x => x.ColumnName + " = '" + x.Value + "'"));
             string whereClause = MetaSqliteCells.Where(x => x.IsPrimaryId).Select(x => x.ColumnName + " = " + x.Value).Single();
             return $"UPDATE {this.TableName} SET {updateClause} WHERE {whereClause}";
         }

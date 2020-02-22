@@ -68,7 +68,7 @@ namespace SQLiteEZMode
         {
             //Create object of proper type to store result
             var returnObject = (T)Activator.CreateInstance(typeof(T));
-            MetaSqliteRow metaSqliteRow = GetOrCreateCachedSqliteRow(typeof(T));
+            MetaSqliteRow metaSqliteRow = GetMetaDataRowWithoutValue(typeof(T));
 
             SqliteCommand command = Connection.CreateCommand();
             command.CommandText = metaSqliteRow.GetSelectStatementWithId(primaryKeyId);
@@ -100,7 +100,7 @@ namespace SQLiteEZMode
         public IEnumerable<T> SelectAll<T>()
         {
             List<T> results = new List<T>();
-            MetaSqliteRow metaSqliteRow = GetOrCreateCachedSqliteRow(typeof(T));
+            MetaSqliteRow metaSqliteRow = GetMetaDataRowWithoutValue(typeof(T));
             SqliteCommand command = Connection.CreateCommand();
             command.CommandText = metaSqliteRow.GetSelectStatement();
             var reader = command.ExecuteReader();
@@ -111,9 +111,13 @@ namespace SQLiteEZMode
                 foreach (MetaSqliteCell sqliteCell in metaSqliteRow.MetaSqliteCells)
                 {
                     var value = reader.GetValue(index++);
-                    if (Type.GetTypeCode(value.GetType()) == TypeCode.Int64)
+                    if (sqliteCell.OriginalType == typeof(int))
                     {
                         sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { Convert.ToInt32(value) });
+                    }
+                    else if (sqliteCell.CellAttribute.DataType == CellDataTypes.JSON)
+                    {
+                        sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { Newtonsoft.Json.JsonConvert.DeserializeObject(value.ToString(), sqliteCell.OriginalType) });
                     }
                     else
                     {
@@ -141,48 +145,39 @@ namespace SQLiteEZMode
             //Create intermediary rows for each object
             foreach (var item in items)
             {
-                var intermediaryRow = GetOrCreateCachedSqliteRow(item);
+                var intermediaryRow = GetMetaDataRowWithValue(item);
                 sqliteRow.Add(intermediaryRow);
             }
 
-            Type type = items.First().GetType();
 
             //Create statement similar to "INSERT INTO TABLE (column1, column2, column3)", excluding the primary key 
-            var firstRow = sqliteRow.First();
-            string columnNames = string.Join(",", firstRow.MetaSqliteCells.Where(x => !x.IsPrimaryId).Select(x => x.ColumnName));
-            StringBuilder sb = new StringBuilder($"INSERT INTO {firstRow.TableName}({columnNames})");
-            sb.AppendLine();
-            sb.AppendLine("VALUES");
-
-            //Create line for each row similar to:
-            //VALUES(value1,value2,value3),
-            //      (value1,value2,value3)
+            var transaction = Connection.BeginTransaction();
             foreach (var row in sqliteRow)
             {
-                //Get each non-primary key column
-                string values = string.Join(",", row.MetaSqliteCells.Where(x => !x.IsPrimaryId).Select(x => '\'' + x.Value + '\''));
-                sb.AppendLine($"({values}),");
+                SqliteCommand insertCommand = Connection.CreateCommand();
+                insertCommand.CommandText = sqliteRow.First().GetInsertIntoStatement();
+                var values = row.MetaSqliteCells.Where(x => !x.IsPrimaryId).Select(x => x.Value);
+                int count = 1;
+                foreach (var value in values)
+                {
+                    insertCommand.Parameters.AddWithValue($"@param{count++}", value != null ? value : string.Empty);
+                }
+                //Update the records in the database
+                insertCommand.ExecuteNonQuery();
             }
-            //Remove the final newline and comma
-            sb.Remove(sb.Length - 3, 3);
-            var transaction = Connection.BeginTransaction();
-            SqliteCommand insertCommand = Connection.CreateCommand();
-            insertCommand.Transaction = transaction;
-            insertCommand.CommandText = sb.ToString();
-            //Update the records in the database
-            insertCommand.ExecuteNonQuery();
 
             //Grab the last inserted id so we can properly update the base objects
             SqliteCommand lastInsertIdSelect = Connection.CreateCommand();
             //Use a transaction so that we can get an accurate id for the new rows
             lastInsertIdSelect.Transaction = transaction;
-            lastInsertIdSelect.CommandText = $"SELECT last_insert_rowid() FROM {firstRow.TableName}";
+            lastInsertIdSelect.CommandText = $"SELECT last_insert_rowid() FROM {sqliteRow.First().TableName}";
             //Note that this only supports Int32 instead of SQLite's default Int64
             int lastId = Convert.ToInt32(lastInsertIdSelect.ExecuteScalar());
 
             //Start from the first id and populate the property on each object
             int nextId = lastId - items.Count() + 1;
-            MetaSqliteRow metaSqliteRow = GetOrCreateCachedSqliteRow(type);
+            Type type = items.First().GetType();
+            MetaSqliteRow metaSqliteRow = GetMetaDataRowWithoutValue(type);
             foreach (var item in items)
             {
                 MethodInfo primaryKeySetter = metaSqliteRow.MetaSqliteCells.Where(x => x.IsPrimaryId).First().SetValueMethod;
@@ -214,7 +209,7 @@ namespace SQLiteEZMode
             SqliteTransaction transaction = Connection.BeginTransaction();
             foreach (var item in items)
             {
-                MetaSqliteRow sqliteRow = GetOrCreateCachedSqliteRow(item);
+                MetaSqliteRow sqliteRow = GetMetaDataRowWithValue(item);
                 string updateStatement = sqliteRow.GetUpdateStatement();
                 SqliteCommand command = Connection.CreateCommand();
                 command.Transaction = transaction;
@@ -246,7 +241,7 @@ namespace SQLiteEZMode
             SqliteTransaction transaction = Connection.BeginTransaction();
             foreach (var item in items)
             {
-                MetaSqliteRow sqliteRow = GetOrCreateCachedSqliteRow(item);
+                MetaSqliteRow sqliteRow = GetMetaDataRowWithValue(item);
                 string deleteStatement = sqliteRow.GetDeleteStatement();
                 SqliteCommand command = Connection.CreateCommand();
                 command.Transaction = transaction;
@@ -286,7 +281,7 @@ namespace SQLiteEZMode
         {
             List<T> results = new List<T>();
 
-            MetaSqliteRow metaSqliteRow = GetOrCreateCachedSqliteRow(typeof(T));
+            MetaSqliteRow metaSqliteRow = GetMetaDataRowWithoutValue(typeof(T));
 
             SqliteCommand command = Connection.CreateCommand();
             command.CommandText = query;
@@ -319,7 +314,7 @@ namespace SQLiteEZMode
         /// <typeparam name="T">The type to analyze and verify for SQLite EZ Mode compatibility.</typeparam>
         public void VerifyType<T>()
         {
-            var intermediaryRow = GetOrCreateCachedSqliteRow(typeof(T));
+            var intermediaryRow = GetMetaDataRowWithoutValue(typeof(T));
             //Confirm that the table exists
             var command = Connection.CreateCommand();
             command.CommandText = $"SELECT name from sqlite_master WHERE type='table' AND name='{intermediaryRow.TableName}'";
@@ -334,79 +329,115 @@ namespace SQLiteEZMode
             }
         }
 
-        private MetaSqliteRow GetOrCreateCachedSqliteRow(Type type)
+        private MetaSqliteRow GetMetaDataRowWithoutValue(Type type)
         {
-            return GetOrCreateCachedSqliteRow(Activator.CreateInstance(type));
+            return (GetMetaDataRowWithoutValue(Activator.CreateInstance(type)));
         }
 
-        private MetaSqliteRow GetOrCreateCachedSqliteRow(dynamic targetObject)
+        private MetaSqliteRow GetMetaDataRowWithoutValue(dynamic targetObject)
         {
+            Type type = targetObject.GetType();
+            //Check if reflection has already been cached
+            if (rowSchemaMap.ContainsKey(type))
+            {
+                return rowSchemaMap[type];
+            }
             if (OperationMode == OperationModes.EXPLICIT_TAGGING)
             {
-                Type rowType = targetObject.GetType();
-                //Check if reflection has already been cached
-                if (rowSchemaMap.ContainsKey(rowType))
-                { //Used cached values to save on reflection
-                    MetaSqliteRow newRow = new MetaSqliteRow();
-                    MetaSqliteRow cachedRow = rowSchemaMap[rowType];
+                return CacheMetaRowExplicitTag(type);
+            }
+            else if (OperationMode == OperationModes.TAGLESS)
+            {
+                return CacheMetaRowTagless(type);
+            }
+            else
+            {
+                throw new NotSupportedException("Unsupported operation mode for caching.");
+            }
+        }
 
-                    newRow.TableName = cachedRow.TableName;
-                    //We need to update values based off of the object parameter, but many properties can be set from cached values
-                    foreach (MetaSqliteCell sqliteCellAttribute in cachedRow.MetaSqliteCells)
-                    {
-                        MetaSqliteCell cachedCell = cachedRow.MetaSqliteCells.Where(x => x.ColumnName.Equals(sqliteCellAttribute.ColumnName)).FirstOrDefault();
-                        object rawValue = sqliteCellAttribute.GetValueMethod.Invoke(targetObject, new object[] { });
-                        string value = rawValue == null ? null : rawValue.ToString();
-                        newRow.MetaSqliteCells.Add(new MetaSqliteCell(cachedCell.CellAttribute, cachedCell.GetValueMethod, cachedCell.SetValueMethod)
-                        {
-                            //DataType will be the same as the cached property
-                            DataType = sqliteCellAttribute.DataType,
-                            //ColumnName will be the same as the cached property
-                            ColumnName = sqliteCellAttribute.ColumnName,
-                            //Invoke the cached getter method for the value
-                            Value = value,
-                            IsPrimaryId = sqliteCellAttribute.IsPrimaryId
-                        });
-                    }
-                    return newRow;
+        private MetaSqliteRow GetMetaDataRowWithValue(dynamic targetObject)
+        {
+            MetaSqliteRow newRow = GetMetaDataRowWithoutValue(targetObject).Copy();
+            foreach (MetaSqliteCell sqliteCellAttribute in newRow.MetaSqliteCells)
+            {
+                MetaSqliteCell cachedCell = newRow.MetaSqliteCells.Where(x => x.ColumnName.Equals(sqliteCellAttribute.ColumnName)).FirstOrDefault();
+                object rawValue = sqliteCellAttribute.GetValueMethod.Invoke(targetObject, new object[] { });
+                if (cachedCell.CellAttribute.DataType == CellDataTypes.JSON)
+                {
+                    cachedCell.Value = Newtonsoft.Json.JsonConvert.SerializeObject(rawValue);
                 }
                 else
                 {
-                    MetaSqliteRow newCacheRow = new MetaSqliteRow();
-                    //Get table name
-                    SqliteTableAttribute tableAttribute = ((SqliteTableAttribute[])targetObject.GetType().GetCustomAttributes(typeof(SqliteTableAttribute), inherit: false)).FirstOrDefault();
-                    if (tableAttribute == null)
-                    {
-                        throw new NotSupportedException("Expected Class attribute \"SqliteTable\"");
-                    }
-                    newCacheRow.TableName = tableAttribute.TableName;
-                    var propertyInfoList = targetObject.GetType().GetProperties();
-                    //Process properties
-                    foreach (PropertyInfo propertyInfo in propertyInfoList)
-                    {
-                        SqliteCellAttribute cellAttribute = ((SqliteCellAttribute[])propertyInfo.GetCustomAttributes(typeof(SqliteCellAttribute), inherit: false)).FirstOrDefault();
-                        if (cellAttribute == null)
-                        {
-                            //Skip attributes that aren't tagged with EZ-Mode data types
-                            continue;
-                        }
-                        var cellData = new MetaSqliteCell(cellAttribute, propertyInfo.GetGetMethod(), propertyInfo.GetSetMethod())
-                        {
-                            DataType = cellAttribute.DataType,
-                            //Get the column name from the attribute first, then the property as a backup
-                            ColumnName = cellAttribute.ColumnName != null ? cellAttribute.ColumnName : propertyInfo.Name,
-                            Value = propertyInfo.GetValue(targetObject, null)?.ToString(),
-                            IsPrimaryId = cellAttribute.IsPrimaryId,
-                        };
-                        newCacheRow.MetaSqliteCells.Add(cellData);
-                    }
-                    //Add the row to the schema map for easier traversal in the future
-                    rowSchemaMap.Add(rowType, newCacheRow);
-                    return newCacheRow;
+                    cachedCell.Value = (rawValue == null) ? null : rawValue.ToString();
                 }
             }
-            throw new NotSupportedException("Unsupported operation mode for caching.");
+
+            return newRow;
         }
+
+        private MetaSqliteRow CacheMetaRowExplicitTag(Type type)
+        {
+
+            MetaSqliteRow newCacheRow = new MetaSqliteRow();
+            //Get table name
+            SqliteTableAttribute tableAttribute = ((SqliteTableAttribute[])type.GetCustomAttributes(typeof(SqliteTableAttribute), inherit: false)).FirstOrDefault();
+            if (tableAttribute == null)
+            {
+                throw new NotSupportedException("Expected Class attribute \"SqliteTable\"");
+            }
+            newCacheRow.TableName = tableAttribute.TableName;
+            var propertyInfoList = type.GetProperties(BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+            //Process properties
+            foreach (PropertyInfo propertyInfo in propertyInfoList)
+            {
+                SqliteCellAttribute cellAttribute = ((SqliteCellAttribute[])propertyInfo.GetCustomAttributes(typeof(SqliteCellAttribute), inherit: false)).FirstOrDefault();
+                if (cellAttribute == null)
+                {
+                    //Skip attributes that aren't tagged with EZ-Mode data types
+                    continue;
+                }
+                newCacheRow.MetaSqliteCells.Add(new MetaSqliteCell(cellAttribute, propertyInfo, publicOnly: false));
+            }
+            //Add the row to the schema map for easier traversal in the future
+            rowSchemaMap.Add(type, newCacheRow);
+            return newCacheRow;
+        }
+
+        private MetaSqliteRow CacheMetaRowTagless(Type type)
+        {
+            MetaSqliteRow newCacheRow = new MetaSqliteRow();
+            newCacheRow.TableName = type.Name;
+
+            var propertyInfoList = type.GetProperties(BindingFlags.Instance | BindingFlags.Public);
+            //Process properties
+            bool primaryIdFound = false;
+            foreach (PropertyInfo propertyInfo in propertyInfoList)
+            {
+                if (propertyInfo.Name.Equals("Id"))
+                {
+                    newCacheRow.MetaSqliteCells.Add(new MetaSqliteCell(propertyInfo, CellDataTypes.INTEGER, publicOnly: true, isPrimaryKey: true));
+                    primaryIdFound = true;
+                    continue;
+                }
+                if ((propertyInfo.PropertyType != typeof(string)) && propertyInfo.PropertyType.GetInterface(nameof(IEnumerable<object>)) != null)
+                { //IEnumerable handling
+                    newCacheRow.MetaSqliteCells.Add(new MetaSqliteCell(propertyInfo, CellDataTypes.JSON, publicOnly: true, isPrimaryKey: false));
+                }
+                else
+                {
+                    newCacheRow.MetaSqliteCells.Add(new MetaSqliteCell(propertyInfo, CellDataTypes.TEXT, publicOnly: true, isPrimaryKey: false));
+                }
+            }
+            if (!primaryIdFound)
+            {
+                throw new InvalidOperationException("Primary key \"Id\"not found.");
+            }
+            //Add the row to the schema map for easier traversal in the future
+            rowSchemaMap.Add(type, newCacheRow);
+            return newCacheRow;
+        }
+
 
         public void Dispose()
         {
