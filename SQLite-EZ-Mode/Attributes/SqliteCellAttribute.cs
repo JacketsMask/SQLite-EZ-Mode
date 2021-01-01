@@ -55,8 +55,10 @@ namespace SQLiteEZMode.Attributes
     public enum CellDataTypes
     {
         NULL,
+        BOOL,
         INTEGER,
         TEXT,
         JSON,
+        REAL,
     }
 }

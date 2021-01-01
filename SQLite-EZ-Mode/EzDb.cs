@@ -67,27 +67,12 @@ namespace SQLiteEZMode
         public T SelectSingle<T>(int primaryKeyId)
         {
             //Create object of proper type to store result
-            var returnObject = (T)Activator.CreateInstance(typeof(T));
             MetaSqliteRow metaSqliteRow = GetMetaDataRowWithoutValue(typeof(T));
-
             SqliteCommand command = Connection.CreateCommand();
             command.CommandText = metaSqliteRow.GetSelectStatementWithId(primaryKeyId);
             var reader = command.ExecuteReader();
             reader.Read();
-
-            int index = 0;
-            foreach (MetaSqliteCell sqliteCell in metaSqliteRow.MetaSqliteCells)
-            {
-                var value = reader.GetValue(index++);
-                if (Type.GetTypeCode(value.GetType()) == TypeCode.Int64)
-                {
-                    sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { Convert.ToInt32(value) });
-                }
-                else
-                {
-                    sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { value });
-                }
-            }
+            var returnObject = PopulateSelectedItem<T>(reader, metaSqliteRow);
 
             return returnObject;
         }
@@ -106,27 +91,45 @@ namespace SQLiteEZMode
             var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                var returnObject = (T)Activator.CreateInstance(typeof(T));
-                int index = 0;
-                foreach (MetaSqliteCell sqliteCell in metaSqliteRow.MetaSqliteCells)
-                {
-                    var value = reader.GetValue(index++);
-                    if (sqliteCell.OriginalType == typeof(int))
-                    {
-                        sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { Convert.ToInt32(value) });
-                    }
-                    else if (sqliteCell.CellAttribute.DataType == CellDataTypes.JSON)
-                    {
-                        sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { Newtonsoft.Json.JsonConvert.DeserializeObject(value.ToString(), sqliteCell.OriginalType) });
-                    }
-                    else
-                    {
-                        sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { value });
-                    }
-                }
-                results.Add(returnObject);
+                var populatedItem = PopulateSelectedItem<T>(reader, metaSqliteRow);
+                results.Add(populatedItem);
             }
             return results;
+        }
+
+        private T PopulateSelectedItem<T>(SqliteDataReader reader, MetaSqliteRow metaSqliteRow)
+        {
+            var returnObject = (T)Activator.CreateInstance(typeof(T));
+            int index = 0;
+            foreach (MetaSqliteCell sqliteCell in metaSqliteRow.MetaSqliteCells)
+            {
+                var value = reader.GetValue(index++);
+                if (sqliteCell.OriginalType == typeof(int))
+                {
+                    sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { Convert.ToInt32(value) });
+                }
+                else if (sqliteCell.CellAttribute.DataType == CellDataTypes.REAL)
+                {
+                    sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { Convert.ToInt64(value) });
+                }
+                else if (sqliteCell.CellAttribute.DataType == CellDataTypes.BOOL)
+                {
+                    sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { Convert.ToBoolean(value) });
+                }
+                else if (sqliteCell.CellAttribute.DataType == CellDataTypes.JSON)
+                {
+                    sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { Newtonsoft.Json.JsonConvert.DeserializeObject(value.ToString(), sqliteCell.OriginalType) });
+                }
+                else if ((value as DBNull) != null)
+                {
+                    // Don't set a value if its DbNull
+                }
+                else
+                {
+                    sqliteCell.SetValueMethod.Invoke(returnObject, new object[] { value });
+                }
+            }
+            return returnObject;
         }
 
 
@@ -148,7 +151,6 @@ namespace SQLiteEZMode
                 var intermediaryRow = GetMetaDataRowWithValue(item);
                 sqliteRow.Add(intermediaryRow);
             }
-
 
             //Create statement similar to "INSERT INTO TABLE (column1, column2, column3)", excluding the primary key 
             var transaction = Connection.BeginTransaction();
@@ -211,10 +213,16 @@ namespace SQLiteEZMode
             {
                 MetaSqliteRow sqliteRow = GetMetaDataRowWithValue(item);
                 string updateStatement = sqliteRow.GetUpdateStatement();
-                SqliteCommand command = Connection.CreateCommand();
-                command.Transaction = transaction;
-                command.CommandText = updateStatement;
-                command.ExecuteNonQuery();
+                SqliteCommand updateCommand = Connection.CreateCommand();
+                var values = sqliteRow.MetaSqliteCells.Where(x => !x.IsPrimaryId).Select(x => x.Value);
+                int count = 1;
+                foreach (var value in values)
+                {
+                    updateCommand.Parameters.AddWithValue($"@param{count++}", value != null ? value : string.Empty);
+                }
+                updateCommand.Transaction = transaction;
+                updateCommand.CommandText = updateStatement;
+                updateCommand.ExecuteNonQuery();
             }
             transaction.Commit();
         }
@@ -289,20 +297,7 @@ namespace SQLiteEZMode
 
             while (reader.Read())
             {
-                var nextResult = (T)Activator.CreateInstance(typeof(T));
-                int index = 0;
-                foreach (MetaSqliteCell sqliteCell in metaSqliteRow.MetaSqliteCells)
-                {
-                    var value = reader.GetValue(index++);
-                    if (Type.GetTypeCode(value.GetType()) == TypeCode.Int64)
-                    {
-                        sqliteCell.SetValueMethod.Invoke(nextResult, new object[] { Convert.ToInt32(value) });
-                    }
-                    else
-                    {
-                        sqliteCell.SetValueMethod.Invoke(nextResult, new object[] { value });
-                    }
-                }
+                var nextResult = PopulateSelectedItem<T>(reader, metaSqliteRow);
                 results.Add(nextResult);
             }
             return results;
@@ -418,9 +413,12 @@ namespace SQLiteEZMode
                 {
                     newCacheRow.MetaSqliteCells.Add(new MetaSqliteCell(propertyInfo, CellDataTypes.INTEGER, publicOnly: true, isPrimaryKey: true));
                     primaryIdFound = true;
-                    continue;
                 }
-                if ((propertyInfo.PropertyType != typeof(string)) && propertyInfo.PropertyType.GetInterface(nameof(IEnumerable<object>)) != null)
+                else if (propertyInfo.PropertyType == typeof(bool))
+                {
+                    newCacheRow.MetaSqliteCells.Add(new MetaSqliteCell(propertyInfo, CellDataTypes.BOOL, publicOnly: true, isPrimaryKey: false));
+                }
+                else if ((propertyInfo.PropertyType != typeof(string)) && propertyInfo.PropertyType.GetInterface(nameof(IEnumerable<object>)) != null)
                 { //IEnumerable handling
                     newCacheRow.MetaSqliteCells.Add(new MetaSqliteCell(propertyInfo, CellDataTypes.JSON, publicOnly: true, isPrimaryKey: false));
                 }

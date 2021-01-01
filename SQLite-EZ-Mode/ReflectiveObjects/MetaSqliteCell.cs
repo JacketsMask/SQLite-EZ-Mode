@@ -78,6 +78,8 @@ namespace SQLiteEZMode.ReflectiveObjects
                 case CellDataTypes.INTEGER: return "INTEGER";
                 case CellDataTypes.TEXT: return "TEXT";
                 case CellDataTypes.JSON: return "JSON";
+                case CellDataTypes.BOOL: return "BOOL";
+                case CellDataTypes.REAL: return "REAL";
                 default: throw new InvalidOperationException("Unsupported data type string conversion.");
             }
         }
